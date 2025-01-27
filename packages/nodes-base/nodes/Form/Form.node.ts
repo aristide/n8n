@@ -15,12 +15,13 @@ import {
 	FORM_TRIGGER_NODE_TYPE,
 	tryToParseJsonToFormFields,
 	NodeConnectionType,
-	WAIT_NODE_TYPE,
 	WAIT_INDEFINITELY,
 } from 'n8n-workflow';
 
+import { renderFormCompletion } from './formCompletionUtils';
+import { renderFormNode } from './formNodeUtils';
 import { formDescription, formFields, formTitle } from '../Form/common.descriptions';
-import { prepareFormReturnItem, renderForm, resolveRawData } from '../Form/utils';
+import { prepareFormReturnItem, resolveRawData } from '../Form/utils';
 
 export const formFieldsProperties: INodeProperties[] = [
 	{
@@ -272,36 +273,7 @@ export class Form extends Node {
 		const method = context.getRequestObject().method;
 
 		if (operation === 'completion' && method === 'GET') {
-			const completionTitle = context.getNodeParameter('completionTitle', '') as string;
-			const completionMessage = context.getNodeParameter('completionMessage', '') as string;
-			const redirectUrl = context.getNodeParameter('redirectUrl', '') as string;
-			const options = context.getNodeParameter('options', {}) as { formTitle: string };
-
-			if (redirectUrl) {
-				res.send(
-					`<html><head><meta http-equiv="refresh" content="0; url=${redirectUrl}"></head></html>`,
-				);
-				return { noWebhookResponse: true };
-			}
-
-			let title = options.formTitle;
-			if (!title) {
-				title = context.evaluateExpression(
-					`{{ $('${trigger?.name}').params.formTitle }}`,
-				) as string;
-			}
-			const appendAttribution = context.evaluateExpression(
-				`{{ $('${trigger?.name}').params.options?.appendAttribution === false ? false : true }}`,
-			) as boolean;
-
-			res.render('form-trigger-completion', {
-				title: completionTitle,
-				message: completionMessage,
-				formTitle: title,
-				appendAttribution,
-			});
-
-			return { noWebhookResponse: true };
+			return renderFormCompletion(context, res, trigger);
 		}
 
 		if (operation === 'completion' && method === 'POST') {
@@ -311,68 +283,7 @@ export class Form extends Node {
 		}
 
 		if (method === 'GET') {
-			const options = context.getNodeParameter('options', {}) as {
-				formTitle: string;
-				formDescription: string;
-				buttonLabel: string;
-			};
-
-			let title = options.formTitle;
-			if (!title) {
-				title = context.evaluateExpression(
-					`{{ $('${trigger?.name}').params.formTitle }}`,
-				) as string;
-			}
-
-			let description = options.formDescription;
-			if (!description) {
-				description = context.evaluateExpression(
-					`{{ $('${trigger?.name}').params.formDescription }}`,
-				) as string;
-			}
-
-			let buttonLabel = options.buttonLabel;
-			if (!buttonLabel) {
-				buttonLabel =
-					(context.evaluateExpression(
-						`{{ $('${trigger?.name}').params.options?.buttonLabel }}`,
-					) as string) || 'Submit';
-			}
-
-			const responseMode = 'onReceived';
-
-			let redirectUrl;
-
-			const connectedNodes = context.getChildNodes(context.getNode().name);
-
-			const hasNextPage = connectedNodes.some(
-				(node) => !node.disabled && (node.type === FORM_NODE_TYPE || node.type === WAIT_NODE_TYPE),
-			);
-
-			if (hasNextPage) {
-				redirectUrl = context.evaluateExpression('{{ $execution.resumeFormUrl }}') as string;
-			}
-
-			const appendAttribution = context.evaluateExpression(
-				`{{ $('${trigger?.name}').params.options?.appendAttribution === false ? false : true }}`,
-			) as boolean;
-
-			renderForm({
-				context,
-				res,
-				formTitle: title,
-				formDescription: description,
-				formFields: fields,
-				responseMode,
-				mode,
-				redirectUrl,
-				appendAttribution,
-				buttonLabel,
-			});
-
-			return {
-				noWebhookResponse: true,
-			};
+			return renderFormNode(context, res, trigger, fields, mode);
 		}
 
 		let useWorkflowTimezone = context.evaluateExpression(
